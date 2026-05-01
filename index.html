@@ -31,6 +31,29 @@
     --gap: 2px;
   }
 
+  /* ===== Light Mode (标准模式) ===== */
+  html[data-theme="light"] {
+    --bg: #f5f5f7;
+    --bg-panel: #ffffff;
+    --bg-surface: #f0f0f2;
+    --bg-elevated: #e8e8ec;
+    --text-primary: #1d1d1f;
+    --text-secondary: #6e6e73;
+    --text-tertiary: #86868b;
+    --text-muted: #aeaeb2;
+    --accent: #5856d6;
+    --accent-bg: #5856d6;
+    --accent-hover: #7472e8;
+    --accent-glow: rgba(88, 86, 214, 0.15);
+    --border-subtle: rgba(0, 0, 0, 0.06);
+    --border-standard: rgba(0, 0, 0, 0.1);
+    --stage-childhood: #e84393;
+    --stage-student: #2e86de;
+    --stage-work: #6c5ce7;
+    --stage-retired: #00b894;
+    --stage-unlived: rgba(0, 0, 0, 0.06);
+  }
+
   * { margin: 0; padding: 0; box-sizing: border-box; }
 
   body {
@@ -41,6 +64,70 @@
     min-height: 100vh;
     overflow-x: hidden;
     -webkit-font-smoothing: antialiased;
+    transition: background 0.4s ease, color 0.4s ease;
+  }
+
+  /* ===== Particle Canvas ===== */
+  #particleCanvas {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    z-index: 0;
+    pointer-events: none;
+  }
+  .container { position: relative; z-index: 1; }
+
+  /* ===== Theme Toggle Button ===== */
+  .theme-toggle {
+    position: fixed;
+    top: 20px;
+    right: 20px;
+    z-index: 100;
+    width: 48px;
+    height: 48px;
+    border-radius: 50%;
+    background: var(--bg-panel);
+    border: 1px solid var(--border-standard);
+    color: var(--text-primary);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 20px;
+    transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.2);
+  }
+  .theme-toggle:hover {
+    transform: scale(1.1) rotate(15deg);
+    box-shadow: 0 6px 24px rgba(0, 0, 0, 0.3);
+    border-color: var(--accent);
+  }
+  .theme-toggle:active {
+    transform: scale(0.95);
+  }
+
+  /* Light mode overrides for cards & panels */
+  html[data-theme="light"] .input-section,
+  html[data-theme="light"] .grid-container,
+  html[data-theme="light"] .activity-section,
+  html[data-theme="light"] .milestone-section {
+    box-shadow: 0 2px 12px rgba(0, 0, 0, 0.06);
+  }
+  html[data-theme="light"] .stat-card:hover {
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
+  }
+  html[data-theme="light"] .btn:hover {
+    box-shadow: 0 4px 16px rgba(88, 86, 214, 0.3);
+  }
+  html[data-theme="light"] .tooltip {
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.12);
+  }
+  html[data-theme="light"] .pixel.milestone {
+    box-shadow: 0 0 8px rgba(255, 230, 109, 0.6);
   }
 
   .container { max-width: 1200px; margin: 0 auto; padding: 80px 24px; }
@@ -523,10 +610,17 @@
     .activity-bar .weeks { width: 80px; min-width: 80px; font-size: 11px; }
     .grid-container { padding: 20px; }
     .activity-section, .milestone-section { padding: 24px; }
+    .theme-toggle { width: 40px; height: 40px; font-size: 16px; top: 12px; right: 12px; }
   }
 </style>
 </head>
 <body>
+
+<!-- Particle Background Canvas -->
+<canvas id="particleCanvas"></canvas>
+
+<!-- Theme Toggle -->
+<button class="theme-toggle" id="themeToggle" onclick="toggleTheme()" title="切换主题">🌙</button>
 
 <div class="container">
   <div class="header">
@@ -835,6 +929,199 @@
   }
 
   window.addEventListener('load', () => setTimeout(generateGrid, 500));
+
+  // ===== Theme Toggle =====
+  function toggleTheme() {
+    const html = document.documentElement;
+    const btn = document.getElementById('themeToggle');
+    if (html.getAttribute('data-theme') === 'light') {
+      html.removeAttribute('data-theme');
+      btn.textContent = '🌙';
+      btn.title = '切换到标准模式';
+      localStorage.setItem('theme', 'dark');
+    } else {
+      html.setAttribute('data-theme', 'light');
+      btn.textContent = '☀️';
+      btn.title = '切换到暗夜模式';
+      localStorage.setItem('theme', 'light');
+    }
+    // Update particle colors for the new theme
+    if (window.updateParticleTheme) window.updateParticleTheme();
+  }
+
+  // Restore saved theme
+  (function() {
+    const saved = localStorage.getItem('theme');
+    if (saved === 'light') {
+      document.documentElement.setAttribute('data-theme', 'light');
+      const btn = document.getElementById('themeToggle');
+      if (btn) { btn.textContent = '☀️'; btn.title = '切换到暗夜模式'; }
+    }
+  })();
+
+  // ===== Pixel Particle Background (Trae-style) =====
+  (function() {
+    const canvas = document.getElementById('particleCanvas');
+    const ctx = canvas.getContext('2d');
+    let particles = [];
+    let w, h;
+    let mouse = { x: -1000, y: -1000 };
+
+    function resize() {
+      w = canvas.width = window.innerWidth;
+      h = canvas.height = window.innerHeight;
+    }
+
+    function isLight() {
+      return document.documentElement.getAttribute('data-theme') === 'light';
+    }
+
+    function getParticleColor(alpha) {
+      if (isLight()) {
+        return `rgba(88, 86, 214, ${alpha})`;
+      }
+      // Dark mode: mix of green (Trae) and accent purple
+      const colors = [
+        `rgba(0, 255, 136, ${alpha})`,   // Trae green
+        `rgba(0, 212, 170, ${alpha})`,   // teal
+        `rgba(113, 112, 255, ${alpha})`, // accent purple
+        `rgba(0, 255, 200, ${alpha})`,   // cyan-green
+      ];
+      return colors[Math.floor(Math.random() * colors.length)];
+    }
+
+    class Particle {
+      constructor() {
+        this.reset();
+      }
+      reset() {
+        this.x = Math.random() * w;
+        this.y = Math.random() * h;
+        this.size = Math.random() * 3 + 1;
+        this.baseAlpha = Math.random() * 0.4 + 0.1;
+        this.alpha = this.baseAlpha;
+        this.vx = (Math.random() - 0.5) * 0.3;
+        this.vy = (Math.random() - 0.5) * 0.3;
+        this.pulseSpeed = Math.random() * 0.02 + 0.005;
+        this.pulseOffset = Math.random() * Math.PI * 2;
+        this.isGreen = Math.random() > 0.3; // 70% chance green, 30% accent
+        this.connections = [];
+      }
+      update(time) {
+        this.x += this.vx;
+        this.y += this.vy;
+        // Pulse alpha
+        this.alpha = this.baseAlpha + Math.sin(time * this.pulseSpeed + this.pulseOffset) * 0.15;
+        // Wrap around
+        if (this.x < -10) this.x = w + 10;
+        if (this.x > w + 10) this.x = -10;
+        if (this.y < -10) this.y = h + 10;
+        if (this.y > h + 10) this.y = -10;
+        // Mouse repel
+        const dx = this.x - mouse.x;
+        const dy = this.y - mouse.y;
+        const dist = Math.sqrt(dx * dx + dy * dy);
+        if (dist < 120) {
+          const force = (120 - dist) / 120 * 0.8;
+          this.x += (dx / dist) * force;
+          this.y += (dy / dist) * force;
+        }
+      }
+      draw() {
+        const light = isLight();
+        const a = Math.max(0, this.alpha);
+        if (this.isGreen) {
+          if (light) {
+            ctx.fillStyle = `rgba(88, 86, 214, ${a})`;
+          } else {
+            ctx.fillStyle = `rgba(0, 255, 136, ${a})`;
+            // Glow
+            ctx.shadowColor = 'rgba(0, 255, 136, 0.5)';
+            ctx.shadowBlur = this.size * 3;
+          }
+        } else {
+          if (light) {
+            ctx.fillStyle = `rgba(88, 86, 214, ${a * 0.6})`;
+          } else {
+            ctx.fillStyle = `rgba(113, 112, 255, ${a})`;
+            ctx.shadowColor = 'rgba(113, 112, 255, 0.4)';
+            ctx.shadowBlur = this.size * 2;
+          }
+        }
+        // Draw pixel-style square
+        ctx.fillRect(
+          Math.round(this.x - this.size / 2),
+          Math.round(this.y - this.size / 2),
+          this.size,
+          this.size
+        );
+        ctx.shadowBlur = 0;
+      }
+    }
+
+    function init() {
+      resize();
+      particles = [];
+      const count = Math.min(Math.floor((w * h) / 8000), 200);
+      for (let i = 0; i < count; i++) {
+        particles.push(new Particle());
+      }
+    }
+
+    function drawConnections() {
+      const light = isLight();
+      for (let i = 0; i < particles.length; i++) {
+        for (let j = i + 1; j < particles.length; j++) {
+          const dx = particles[i].x - particles[j].x;
+          const dy = particles[i].y - particles[j].y;
+          const dist = Math.sqrt(dx * dx + dy * dy);
+          if (dist < 100) {
+            const alpha = (1 - dist / 100) * 0.08;
+            ctx.strokeStyle = light
+              ? `rgba(88, 86, 214, ${alpha})`
+              : `rgba(0, 255, 136, ${alpha})`;
+            ctx.lineWidth = 0.5;
+            ctx.beginPath();
+            ctx.moveTo(particles[i].x, particles[i].y);
+            ctx.lineTo(particles[j].x, particles[j].y);
+            ctx.stroke();
+          }
+        }
+      }
+    }
+
+    let time = 0;
+    function animate() {
+      ctx.clearRect(0, 0, w, h);
+      time++;
+      drawConnections();
+      particles.forEach(p => {
+        p.update(time);
+        p.draw();
+      });
+      requestAnimationFrame(animate);
+    }
+
+    window.addEventListener('resize', () => {
+      resize();
+      // Re-adjust particle count
+      const targetCount = Math.min(Math.floor((w * h) / 8000), 200);
+      while (particles.length < targetCount) particles.push(new Particle());
+      while (particles.length > targetCount) particles.pop();
+    });
+
+    document.addEventListener('mousemove', e => {
+      mouse.x = e.clientX;
+      mouse.y = e.clientY;
+    });
+
+    window.updateParticleTheme = function() {
+      // Particles auto-adapt via isLight() checks in draw()
+    };
+
+    init();
+    animate();
+  })();
 </script>
 
 </body>
