@@ -67,13 +67,11 @@
     transition: background 0.4s ease, color 0.4s ease;
   }
 
-  /* ===== Particle Canvas ===== */
-  #particleCanvas {
+  /* ===== Pixel Matrix Background ===== */
+  #pixelCanvas {
     position: fixed;
-    top: 0;
-    left: 0;
-    width: 100%;
-    height: 100%;
+    top: 0; left: 0;
+    width: 100%; height: 100%;
     z-index: 0;
     pointer-events: none;
   }
@@ -616,8 +614,8 @@
 </head>
 <body>
 
-<!-- Particle Background Canvas -->
-<canvas id="particleCanvas"></canvas>
+<!-- Pixel Matrix Canvas -->
+<canvas id="pixelCanvas"></canvas>
 
 <!-- Theme Toggle -->
 <button class="theme-toggle" id="themeToggle" onclick="toggleTheme()" title="切换主题">🌙</button>
@@ -959,168 +957,138 @@
     }
   })();
 
-  // ===== Pixel Particle Background (Trae-style) =====
+  // ===== Trae-style Dense Pixel Matrix Background =====
   (function() {
-    const canvas = document.getElementById('particleCanvas');
+    const canvas = document.getElementById('pixelCanvas');
     const ctx = canvas.getContext('2d');
-    let particles = [];
-    let w, h;
-    let mouse = { x: -1000, y: -1000 };
+    let W, H;
+    let time = 0;
+
+    function isDark() {
+      return document.documentElement.getAttribute('data-theme') !== 'light';
+    }
 
     function resize() {
-      w = canvas.width = window.innerWidth;
-      h = canvas.height = window.innerHeight;
+      W = canvas.width = window.innerWidth;
+      H = canvas.height = window.innerHeight;
     }
 
-    function isLight() {
-      return document.documentElement.getAttribute('data-theme') === 'light';
-    }
+    const CELL = 7;
+    let grid = [];
 
-    function getParticleColor(alpha) {
-      if (isLight()) {
-        return `rgba(88, 86, 214, ${alpha})`;
-      }
-      // Dark mode: mix of green (Trae) and accent purple
-      const colors = [
-        `rgba(0, 255, 136, ${alpha})`,   // Trae green
-        `rgba(0, 212, 170, ${alpha})`,   // teal
-        `rgba(113, 112, 255, ${alpha})`, // accent purple
-        `rgba(0, 255, 200, ${alpha})`,   // cyan-green
-      ];
-      return colors[Math.floor(Math.random() * colors.length)];
-    }
-
-    class Particle {
-      constructor() {
-        this.reset();
-      }
-      reset() {
-        this.x = Math.random() * w;
-        this.y = Math.random() * h;
-        this.size = Math.random() * 3 + 1;
-        this.baseAlpha = Math.random() * 0.4 + 0.1;
-        this.alpha = this.baseAlpha;
-        this.vx = (Math.random() - 0.5) * 0.3;
-        this.vy = (Math.random() - 0.5) * 0.3;
-        this.pulseSpeed = Math.random() * 0.02 + 0.005;
-        this.pulseOffset = Math.random() * Math.PI * 2;
-        this.isGreen = Math.random() > 0.3; // 70% chance green, 30% accent
-        this.connections = [];
-      }
-      update(time) {
-        this.x += this.vx;
-        this.y += this.vy;
-        // Pulse alpha
-        this.alpha = this.baseAlpha + Math.sin(time * this.pulseSpeed + this.pulseOffset) * 0.15;
-        // Wrap around
-        if (this.x < -10) this.x = w + 10;
-        if (this.x > w + 10) this.x = -10;
-        if (this.y < -10) this.y = h + 10;
-        if (this.y > h + 10) this.y = -10;
-        // Mouse repel
-        const dx = this.x - mouse.x;
-        const dy = this.y - mouse.y;
-        const dist = Math.sqrt(dx * dx + dy * dy);
-        if (dist < 120) {
-          const force = (120 - dist) / 120 * 0.8;
-          this.x += (dx / dist) * force;
-          this.y += (dy / dist) * force;
-        }
-      }
-      draw() {
-        const light = isLight();
-        const a = Math.max(0, this.alpha);
-        if (this.isGreen) {
-          if (light) {
-            ctx.fillStyle = `rgba(88, 86, 214, ${a})`;
-          } else {
-            ctx.fillStyle = `rgba(0, 255, 136, ${a})`;
-            // Glow
-            ctx.shadowColor = 'rgba(0, 255, 136, 0.5)';
-            ctx.shadowBlur = this.size * 3;
+    function buildGrid() {
+      grid = [];
+      const cols = Math.ceil(W / CELL) + 2;
+      const rows = Math.ceil(H / CELL) + 2;
+      for (let y = 0; y < rows; y++) {
+        for (let x = 0; x < cols; x++) {
+          const nx = x / cols;
+          const ny = y / rows;
+          const clusters = [
+            { cx: 0.08, cy: 0.15, str: 1.0, decay: 2.2 },
+            { cx: 0.25, cy: 0.3, str: 0.8, decay: 2.8 },
+            { cx: 0.5, cy: 0.45, str: 0.6, decay: 3.5 },
+            { cx: 0.15, cy: 0.6, str: 0.5, decay: 3.2 },
+            { cx: 0.7, cy: 0.65, str: 0.35, decay: 4.5 },
+          ];
+          let prob = 0;
+          for (const cl of clusters) {
+            const d = Math.sqrt((nx - cl.cx) ** 2 + (ny - cl.cy) ** 2);
+            prob += cl.str * Math.exp(-d * cl.decay);
           }
-        } else {
-          if (light) {
-            ctx.fillStyle = `rgba(88, 86, 214, ${a * 0.6})`;
-          } else {
-            ctx.fillStyle = `rgba(113, 112, 255, ${a})`;
-            ctx.shadowColor = 'rgba(113, 112, 255, 0.4)';
-            ctx.shadowBlur = this.size * 2;
+          prob = Math.min(0.95, prob + 0.03);
+          if (Math.random() < prob) {
+            grid.push({
+              x: x * CELL + (Math.random() - 0.5) * 3,
+              y: y * CELL + (Math.random() - 0.5) * 3,
+              size: Math.random() < 0.4 ? 3 : (Math.random() < 0.3 ? 4 : 2),
+              baseAlpha: Math.random() * 0.55 + 0.12,
+              phase: Math.random() * Math.PI * 2,
+              speed: Math.random() * 0.008 + 0.002,
+              drift: (Math.random() - 0.5) * 0.1,
+              driftY: (Math.random() - 0.5) * 0.08,
+              color: Math.random(),
+            });
           }
         }
-        // Draw pixel-style square
-        ctx.fillRect(
-          Math.round(this.x - this.size / 2),
-          Math.round(this.y - this.size / 2),
-          this.size,
-          this.size
-        );
+      }
+    }
+
+    function getColor(c, alpha, dark) {
+      if (dark) {
+        if (c < 0.25) return `rgba(80, 160, 120, ${alpha})`;
+        if (c < 0.45) return `rgba(60, 140, 100, ${alpha})`;
+        if (c < 0.6) return `rgba(100, 180, 140, ${alpha})`;
+        if (c < 0.75) return `rgba(70, 120, 95, ${alpha})`;
+        if (c < 0.9) return `rgba(90, 150, 120, ${alpha})`;
+        return `rgba(50, 110, 80, ${alpha})`;
+      } else {
+        if (c < 0.5) return `rgba(140, 130, 200, ${alpha * 0.35})`;
+        if (c < 0.8) return `rgba(120, 110, 180, ${alpha * 0.3})`;
+        return `rgba(100, 95, 160, ${alpha * 0.25})`;
+      }
+    }
+
+    function draw() {
+      ctx.clearRect(0, 0, W, H);
+      const dark = isDark();
+      time++;
+
+      if (dark) {
+        ctx.strokeStyle = 'rgba(255,255,255,0.018)';
+        ctx.lineWidth = 0.5;
+        for (let x = 0; x < W; x += CELL) {
+          ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, H); ctx.stroke();
+        }
+        for (let y = 0; y < H; y += CELL) {
+          ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(W, y); ctx.stroke();
+        }
+      }
+
+      for (const p of grid) {
+        const alpha = p.baseAlpha + Math.sin(time * p.speed + p.phase) * 0.18;
+        if (alpha <= 0.01) continue;
+        const px = p.x + Math.sin(time * 0.004 + p.phase) * p.drift * 6;
+        const py = p.y + Math.cos(time * 0.003 + p.phase * 0.7) * p.driftY * 5;
+        let glowAlpha = 0;
+        if (Math.random() < 0.001) glowAlpha = 0.4 + Math.random() * 0.35;
+        const finalAlpha = Math.max(0, Math.min(1, alpha + glowAlpha));
+        ctx.fillStyle = getColor(p.color, finalAlpha, dark);
+        if (dark && glowAlpha > 0) {
+          ctx.shadowColor = getColor(p.color, 0.6, true);
+          ctx.shadowBlur = p.size * 6;
+        }
+        ctx.fillRect(Math.round(px - p.size / 2), Math.round(py - p.size / 2), p.size, p.size);
         ctx.shadowBlur = 0;
       }
-    }
 
-    function init() {
-      resize();
-      particles = [];
-      const count = Math.min(Math.floor((w * h) / 8000), 200);
-      for (let i = 0; i < count; i++) {
-        particles.push(new Particle());
-      }
-    }
-
-    function drawConnections() {
-      const light = isLight();
-      for (let i = 0; i < particles.length; i++) {
-        for (let j = i + 1; j < particles.length; j++) {
-          const dx = particles[i].x - particles[j].x;
-          const dy = particles[i].y - particles[j].y;
-          const dist = Math.sqrt(dx * dx + dy * dy);
-          if (dist < 100) {
-            const alpha = (1 - dist / 100) * 0.08;
-            ctx.strokeStyle = light
-              ? `rgba(88, 86, 214, ${alpha})`
-              : `rgba(0, 255, 136, ${alpha})`;
-            ctx.lineWidth = 0.5;
-            ctx.beginPath();
-            ctx.moveTo(particles[i].x, particles[i].y);
-            ctx.lineTo(particles[j].x, particles[j].y);
-            ctx.stroke();
+      if (dark) {
+        for (let i = 0; i < grid.length; i += 2) {
+          for (let j = i + 1; j < Math.min(grid.length, i + 6); j++) {
+            const dx = grid[i].x - grid[j].x;
+            const dy = grid[i].y - grid[j].y;
+            const d = Math.sqrt(dx * dx + dy * dy);
+            if (d < CELL * 2.5) {
+              const la = (1 - d / (CELL * 2.5)) * 0.05;
+              ctx.strokeStyle = `rgba(80, 160, 120, ${la})`;
+              ctx.lineWidth = 0.4;
+              ctx.beginPath();
+              ctx.moveTo(grid[i].x, grid[i].y);
+              ctx.lineTo(grid[j].x, grid[j].y);
+              ctx.stroke();
+            }
           }
         }
       }
+
+      requestAnimationFrame(draw);
     }
 
-    let time = 0;
-    function animate() {
-      ctx.clearRect(0, 0, w, h);
-      time++;
-      drawConnections();
-      particles.forEach(p => {
-        p.update(time);
-        p.draw();
-      });
-      requestAnimationFrame(animate);
-    }
+    resize();
+    buildGrid();
+    draw();
 
-    window.addEventListener('resize', () => {
-      resize();
-      // Re-adjust particle count
-      const targetCount = Math.min(Math.floor((w * h) / 8000), 200);
-      while (particles.length < targetCount) particles.push(new Particle());
-      while (particles.length > targetCount) particles.pop();
-    });
-
-    document.addEventListener('mousemove', e => {
-      mouse.x = e.clientX;
-      mouse.y = e.clientY;
-    });
-
-    window.updateParticleTheme = function() {
-      // Particles auto-adapt via isLight() checks in draw()
-    };
-
-    init();
-    animate();
+    window.addEventListener('resize', () => { resize(); buildGrid(); });
   })();
 </script>
 
